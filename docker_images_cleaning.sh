@@ -1,27 +1,25 @@
 #!/bin/bash
 
-# Ngày hiện tại
+# Get the current date
 current_date=$(date +%s)
 
-# Số ngày để xem xét image đã không sử dụng
+# Number of days to consider images as unused
 days_threshold=3
 
-# Lặp qua danh sách tất cả các Docker images
-for image_id in $(docker images -q); do
-    # Lấy thông tin về image và lấy thời gian tạo
-    image_info=$(docker image inspect -f '{{.Id}} {{.Created}}' $image_id)
-    image_created=$(echo $image_info | awk '{print $2}')
+# Get a list of unused images and their creation times
+unused_images=$(docker images -q --filter "dangling=true" --filter "before=$(date -d @$((current_date - 86400 * days_threshold)) +%Y-%m-%dT%H:%M:%S.%N%z)")
+# 86400 seconds = 1 day
 
-    # Chuyển đổi thời gian tạo thành định dạng ngày
-    created_date=$(date -d "$image_created" +%s)
-
-    # Tính toán số ngày image đã tồn tại
-    days_diff=$(( (current_date - created_date) / 86400 ))
-
-    # Kiểm tra xem image đã tồn tại hơn 3 ngày chưa
-    if [ $days_diff -ge $days_threshold ]; then
-        # Xóa image nếu nó đã tồn tại hơn 3 ngày
-        echo "Xóa image $image_id, được tạo vào $(date -d "$image_created" '+%Y-%m-%d %H:%M:%S')"
-        docker rmi -f $image_id
+# Iterate through the list of unused images
+for image_id in $unused_images; do
+    # Check if this image is being used in a container or service
+    is_used=$(docker ps -a --format "{{.Image}}" | grep -c "$image_id")
+    
+    if [ $is_used -eq 0 ]; then
+        # Remove the image if it's not in use
+        echo "Removing image $image_id"
+        docker rmi $image_id
+    else
+        echo "Not removing image $image_id because it is in use"
     fi
 done
