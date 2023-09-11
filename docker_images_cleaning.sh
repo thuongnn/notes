@@ -1,14 +1,16 @@
 #!/bin/bash
 
-# Get the current date
-current_date=$(date +%s)
+# Get the current date in UTC
+current_date=$(date -u +%s)
 
 # Number of days to consider images as unused
 days_threshold=3
 
+# Calculate the cutoff date in UTC
+cutoff_date=$(date -u -d "@$((current_date - 86400 * days_threshold))" +%Y-%m-%dT%H:%M:%S.%N%z)
+
 # Get a list of unused images and their creation times
-unused_images=$(docker images -q --filter "dangling=true" --filter "before=$(date -d @$((current_date - 86400 * days_threshold)) +%Y-%m-%dT%H:%M:%S.%N%z)")
-# 86400 seconds = 1 day
+unused_images=$(docker images --format "{{.ID}} {{.Created}}" --filter "dangling=true" | awk -v cutoff="$cutoff_date" '$2 < cutoff { print $1 }')
 
 # Iterate through the list of unused images
 for image_id in $unused_images; do
